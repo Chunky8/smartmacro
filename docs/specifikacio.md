@@ -1,0 +1,33 @@
+# Makrotápanyag- és Napi Étrend-optimalizáló (SmartMacro)
+
+## 1. Cél és Architektúra
+A **SmartMacro** egy webes étrend-tervező és receptkezelő alkalmazás, amely támogatja a felhasználókat az egyéni makrotápanyag-célok (különösen az alacsony szénhidráttartalmú étrend) követésében, az európai szabvány szerinti tápértékek (szénhidrát és cukor, zsír és zsírsavak, fehérje, rost, só) századgramm (`0,01 g`) pontosságú számításában, valamint az egyéni tiltólistás alapanyagok kiszűrésében.
+
+**Architektúra:** Különálló webes Frontend (SPA) és REST API alapú Backend tartós adattárolást biztosító adatbázissal. A működési szabályok ellenőrzését és a tápértékszámításokat a backend végzi.
+
+## 2. Szerepkörök és Fő Forgatókönyvek
+* **Felhasználó (Étrendkövető):** Beállítja egyéni napi makrókereteit (maximális napi szénhidrát, cél fehérje és zsír) és a tiltólistás alapanyagait. Alapanyagokból recepteket állít össze, valamint étkezéseket rögzít a napi naplójába.
+* **Adminisztrátor:** Kezeli és hitelesíti a globális alapanyag-törzsadatbázist (100 g-ra vetített energia, fehérje, szénhidrát – ebből cukor, zsír – ebből telített és telítetlen zsírsavak, rost és só értékekkel, `0,01 g` pontossággal).
+
+**Fontosabb forgatókönyvek:**
+1. **Alapanyag felvitele:** Adminisztrátor új alapanyagot rögzít a törzsadatbázisba tápérték-hitelességi ellenőrzés mellett.
+2. **Profil és tiltólista kezelése:** Felhasználó rögzíti a napi szénhidrátlimitjét (g) és a számára tiltott alapanyagokat.
+3. **Recept összeállítása:** Felhasználó alapanyagokból és mennyiségekből (g) receptet hoz létre; a rendszer kiszámítja a recept összesített és 1 adagra jutó tápértékeit.
+4. **Étkezés naplózása:** Felhasználó étkezést ad a napi naplójához; a rendszer ellenőrzi a tiltólistát, majd frissíti a napi egyenleget és a napló státuszát.
+
+## 3. Lényeges bizonytalanságok és választott értelmezésük
+1. **Szénhidrát, cukor és rost kapcsolata (EU szabvány):** A tápértékjelöléseken a cukor és a rost szerepe félreérthető lehet. *Döntés:* A rendszer az EU-s jelölést követi, ahol a „Szénhidrát” már a felszívódó (nettó) érték, a „Rost” külön tétel, a „Cukor” pedig a szénhidrát részhalmaza („amelyből cukrok”). A cukrot nem adjuk hozzá újra a szénhidráthoz, és érvényességi szabály a `0,00 <= Cukor <= Szénhidrát`.
+2. **Zsírok és zsírsavak kapcsolata (EU szabvány):** A telített és telítetlen zsírsavak a teljes zsírtartalom részhalmazai, de a zsírok kémiai felépítése miatt összegük a valóságban kisebb lehet az összes zsírnál. *Döntés:* A zsírsavakat nem adjuk hozzá újra a zsírhoz; együttes összegüknek nem kell kiadnia az összes zsírt, de nem lépheti túl azt (`0,00 <= Telített + Telítetlen <= Zsír`).
+3. **Kerekítési hibák és részeredmények halmozódása:** Bár a tárolás és megjelenítés századgramm (`0,01 g`) pontosságú, a 100 g-ról történő arányosítás és az adagokra osztás több tizedesjegyet vagy végtelen tizedestörtet eredményezhet. *Döntés:* A számítások pontos tizedes számokkal történnek. Egy recepten vagy étkezési tételen belül a részmennyiségeket kerekítés nélkül adjuk össze, majd a tétel végeredményét a hagyományos matematikai kerekítés szabályai szerint (5-től felfelé) két tizedesjegyre (`0,01 g`-ra) kerekítve mentjük a naplóba. A napi összesítés már ezeket a mentett, kerekített tételeket adja össze, így a felületen látható számok összege mindig egyezik a napi egyenleggel.
+4. **Tiltólista vs. napi kerettúllépés kezelése:** Kérdéses, hogy szabályszegéskor a rendszer megtagadja-e a mentést. *Döntés:* Tiltólistás alapanyagot tartalmazó étel naplózását a backend **elutasítja (`422` hiba)**, míg a napi makrókeret túllépésekor az étkezést **elmenti**, de a napi státuszt `KERET_TÚLLÉPVE` figyelmeztetésre állítja.
+5. **Törzsadatok utólagos változása:** Ha egy alapanyag tápértéke módosul a törzsadatbázisban, kérdéses a múltbeli naplók sorsa. *Döntés:* A napi napló rögzítéskor pillanatképet ment a számított makrókról, így a korábbi napok adatai nem változnak meg visszamenőleg.
+
+## 4. Elfogadási feltételek
+1. **[Normál – Arányosított tápértékszámítás és kerekítés]:** Ha a felhasználó rögzít egy tételt (pl. 37 g alapanyag, amelynek 100 g-ra vetített értéke `12,50 g` szénhidrát – ebből `4,00 g` cukor – és `1,25 g` só), a backend a részhalmazok duplázása nélkül, a tétel végén hagyományos kerekítéssel (`5`-től felfelé) számol (`4,625 g -> 4,63 g` szénhidrát, `0,4625 g -> 0,46 g` só), és ezzel frissíti a napi egyenleget.
+2. **[Normál – Napi napló állapotfrissítése]:** Ha a felhasználó napi szénhidrátlimitje `50,00 g`, és rögzít egy `35,25 g` szénhidrátot tartalmazó étkezést, a napló státusza `MEGFELELŐ` marad, a fennmaradó keret pedig `14,75 g` lesz.
+3. **[Határeset 1 – Napi keret pontos elérése és átlépése]:** `50,00 g`-os napi szénhidrátlimit esetén, ha a napi összesített bevitel pontosan `50,00 g`-ra nő, a státusz még `MEGFELELŐ` (`0,00 g` maradék keret). Ha a bevitel `50,01 g`-ra nő, az étkezés elmentődik, de a napi státusz `KERET_TÚLLÉPVE` értékre vált.
+4. **[Határeset 2 – 100%-os makróösszeg és maximális részhalmazok]:** Alapanyag felvitelekor, ha 100 g termékben a fő összetevők (`Fehérje + Szénhidrát + Zsír + Rost + Só`) összege pontosan `100,00 g`, a cukor pontosan megegyezik a szénhidráttal (`Cukor == Szénhidrát`), vagy a `Telített + Telítetlen zsírsavak == Zsír`, a rendszer érvényesként menti az alapanyagot.
+5. **[Hibás bemenet – Hiteltelen makróarány vagy részhalmaz-túllépés]:** Ha új alapanyag rögzítésekor 100 g-ra vetítve a `Fehérje + Szénhidrát + Zsír + Rost + Só > 100,00 g`, a `Cukor > Szénhidrát`, a `Telített + Telítetlen > Zsír`, vagy bármely érték negatív, a backend `422 Unprocessable Entity` hibával elutasítja a kérést.
+6. **[Hibás bemenet – Tiltólistás összetevő szűrése]:** Ha a felhasználó tiltólistáján szerepel egy alapanyag, és olyan receptet vagy tételt próbál a napi naplójába rögzíteni, amely tartalmazza azt (`> 0,00 g` mennyiségben), a backend megtagadja a mentést, és hibaüzenetben megnevezi a tiltott alapanyagot.
+7. **[Hibás bemenet – Érvénytelen tömegmennyiség]:** Ha receptben vagy napi naplózáskor egy alapanyag mennyiségére `<= 0,00 g` vagy `> 5000,00 g` értéket adnak meg, a rendszer hibaüzenettel elutasítja a műveletet.
+8. **[Jogosulatlan művelet – Törzsadatok védelme]:** Ha `Felhasználó` szerepkörrel rendelkező kliens próbál alapanyagot létrehozni, módosítani vagy törölni a globális törzsadatbázisban, a backend `403 Forbidden` válasszal megtagadja a műveletet.
