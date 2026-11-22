@@ -440,3 +440,10 @@ def test_seed_database_populates_100_recipes_and_valid_ingredients(test_db_path:
             fiber=db_to_decimal(row["fiber"]),
             salt=db_to_decimal(row["salt"]),
         )
+
+
+def test_frontend_static_root_served(client: TestClient):
+    """Root path '/' serves the Vanilla HTML/JS frontend."""
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert "SmartMacro" in resp.text

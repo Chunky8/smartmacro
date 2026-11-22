@@ -1,10 +1,12 @@
 from contextlib import asynccontextmanager
 from decimal import Decimal
+from pathlib import Path
 import sqlite3
 from typing import List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from backend.auth import CurrentUser, get_current_user, require_admin
 from backend.database import db_session, db_to_decimal, decimal_to_db, init_db
@@ -703,3 +705,12 @@ def get_daily_summary(
             totals=_profile_to_snapshot(totals),
             entries=entries,
         )
+
+
+# ---------------------------------------------------------------------------
+# Static Frontend (Vanilla HTML/CSS/JS)
+# ---------------------------------------------------------------------------
+
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+if FRONTEND_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
