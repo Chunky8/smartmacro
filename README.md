@@ -111,4 +111,8 @@ További unit tesztek: `tests/test_domain.py` (domain validátorok és kalkulát
 - **Kontextus:** Kérdéses volt, hogy a napi összesítő dinamikusan számolja-e újra a makrókat az `ingredients` táblából, vagy tárolt pillanatképeket összegezzen.
 - **MI javaslat:** A `daily_logs` tábla tárolja el a naplózáskor kerekített makró-pillanatképet (`carbs`, `sugar`, `protein`, `fat`, `salt` stb.), a `GET /api/logs/{log_date}` pedig kizárólag ezeket összegezze; a határesetet pedig szigorú `total > limit` feltétellel ellenőrizzük.
 - **Saját döntés és indoklás:** A snapshot-alapú tárolás egyszerűbbé teszi a napi egyenleg konzisztenciáját és megvédi a múltbeli adatokat a törzsadat-módosításoktól. A határeset helyességét külön hibabemutató teszttel is igazoltuk (`docs/hiba_bemutatas.md`).
-- **Ellenőrzési bizonyíték:** `tests/test_acceptance.py` (`test_ac3_daily_limit_exact_and_exceeded`, `test_snapshot_immutability_after_ingredient_update`) és `tests/test_bug_demo.py` – mind zöld (`31 passed, 1 xfailed`).
+- **Ellenőrzési bizonyíték:** `tests/test_acceptance.py` (`test_ac3_daily_limit_exact_and_exceeded`, `test_snapshot_immutability_after_ingredient_update`) és `tests/test_bug_demo.py` – mind zöld (`34 passed, 1 xfailed`).
+
+---
+
+A fejlesztést irányító promptok a [prompts.md](prompts.md) fájlban találhatók.
