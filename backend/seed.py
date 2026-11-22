@@ -1,6 +1,7 @@
 from decimal import Decimal
 from typing import Optional
 
+from backend.auth import hash_password
 from backend.database import db_session, decimal_to_db
 from backend.domain.validators import (
     validate_ingredient_macros,
@@ -192,23 +193,32 @@ def seed_database(db_path: Optional[str] = None) -> None:
         if count > 0:
             return
 
-        # Default USER (id=1, 50.00 g CH limit) and ADMIN (id=2)
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO users
-                (id, username, role, daily_carb_limit, daily_protein_target, daily_fat_target)
-            VALUES (?, ?, ?, ?, ?, ?);
-            """,
-            (1, "user", "USER", "50.00", "120.00", "70.00"),
-        )
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO users
-                (id, username, role, daily_carb_limit, daily_protein_target, daily_fat_target)
-            VALUES (?, ?, ?, ?, ?, ?);
-            """,
-            (2, "admin", "ADMIN", "50.00", "120.00", "70.00"),
-        )
+        # 1 ADMIN (admin / admin) and 3 USER test accounts (basic, 50.00 g CH limit)
+        seed_users = [
+            ("admin", "admin", "ADMIN"),
+            ("MakkMarci", "basic", "USER"),
+            ("RegősBendegúz", "basic", "USER"),
+            ("ToldiMiklós", "basic", "USER"),
+        ]
+        user_ids: dict[str, int] = {}
+        for username, plain_pw, role in seed_users:
+            cursor = conn.execute(
+                """
+                INSERT OR IGNORE INTO users
+                    (username, password_hash, role, daily_carb_limit, daily_protein_target, daily_fat_target)
+                VALUES (?, ?, ?, ?, ?, ?);
+                """,
+                (username, hash_password(plain_pw), role, "50.00", "120.00", "70.00"),
+            )
+            if cursor.lastrowid:
+                user_ids[username] = int(cursor.lastrowid)
+            else:
+                row = conn.execute(
+                    "SELECT id FROM users WHERE username = ?;", (username,)
+                ).fetchone()
+                user_ids[username] = int(row["id"])
+
+        default_recipe_owner_id = user_ids["MakkMarci"]
 
         # Insert 50 validated ingredients
         ingredient_id_by_name: dict[str, int] = {}
@@ -266,7 +276,7 @@ def seed_database(db_path: Optional[str] = None) -> None:
                 INSERT INTO recipes (user_id, name, servings)
                 VALUES (?, ?, ?);
                 """,
-                (1, recipe_name, decimal_to_db(servings)),
+                (default_recipe_owner_id, recipe_name, decimal_to_db(servings)),
             )
             recipe_id = int(cursor.lastrowid)
             for ing_name, weight_str in items:

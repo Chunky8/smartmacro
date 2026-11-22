@@ -90,6 +90,48 @@ class UserProfileResponse(BaseModel):
     daily_fat_target: Decimal
 
 
+class LoginRequest(BaseModel):
+    username: str = Field(..., min_length=1, max_length=80)
+    password: str = Field(..., min_length=1, max_length=128)
+
+
+class UserSummary(BaseModel):
+    id: int
+    username: str
+    role: str
+
+
+class LoginResponse(BaseModel):
+    token: str
+    user: UserSummary
+
+
+class UserCreate(BaseModel):
+    username: str = Field(..., min_length=1, max_length=80)
+
+    @field_validator("username")
+    @classmethod
+    def check_username_not_blank(cls, v: str) -> str:
+        cleaned = v.strip()
+        if not cleaned:
+            raise ValueError("A felhasználónév nem lehet üres.")
+        return cleaned
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str = Field(..., min_length=1, max_length=128)
+    new_password: str = Field(..., min_length=1, max_length=128)
+    confirm_password: str = Field(..., min_length=1, max_length=128)
+
+    @model_validator(mode="after")
+    def check_passwords_match(self) -> "ChangePasswordRequest":
+        if not self.new_password.strip():
+            raise ValueError("Az új jelszó nem lehet üres.")
+        if self.new_password != self.confirm_password:
+            raise ValueError("Az új jelszó és a megerősítés nem egyezik meg.")
+        return self
+
+
 class BannedIngredientCreate(BaseModel):
     ingredient_id: int = Field(..., ge=1)
 

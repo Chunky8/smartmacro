@@ -8,7 +8,15 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from backend.auth import CurrentUser, get_current_user, require_admin
+from backend.auth import (
+    CurrentUser,
+    create_session_token,
+    delete_session_token,
+    get_current_user,
+    hash_password,
+    require_admin,
+    verify_password,
+)
 from backend.database import db_session, db_to_decimal, decimal_to_db, init_db
 from backend.domain.calculator import (
     MacroProfile,
@@ -23,18 +31,23 @@ from backend.domain.calculator import (
 from backend.schemas import (
     BannedIngredientCreate,
     BannedIngredientResponse,
+    ChangePasswordRequest,
     DailyLogCreate,
     DailyLogResponse,
     DailySummaryResponse,
     IngredientCreate,
     IngredientResponse,
     IngredientUpdate,
+    LoginRequest,
+    LoginResponse,
     MacroSnapshot,
     RecipeCreate,
     RecipeItemResponse,
     RecipeResponse,
+    UserCreate,
     UserProfileResponse,
     UserProfileUpdate,
+    UserSummary,
 )
 from backend.seed import seed_database
 
@@ -107,23 +120,10 @@ def _ensure_user_exists(conn: sqlite3.Connection, current_user: CurrentUser) -> 
         "SELECT * FROM users WHERE id = ?;", (current_user.user_id,)
     ).fetchone()
     if row is None:
-        conn.execute(
-            """
-            INSERT INTO users (id, username, role, daily_carb_limit, daily_protein_target, daily_fat_target)
-            VALUES (?, ?, ?, ?, ?, ?);
-            """,
-            (
-                current_user.user_id,
-                f"user_{current_user.user_id}",
-                current_user.role,
-                "50.00",
-                "120.00",
-                "70.00",
-            ),
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="A felhasználó nem található.",
         )
-        row = conn.execute(
-            "SELECT * FROM users WHERE id = ?;", (current_user.user_id,)
-        ).fetchone()
     return row
 
 
@@ -167,6 +167,128 @@ def _build_recipe_response(conn: sqlite3.Connection, recipe_row: sqlite3.Row) ->
         total_macros=_profile_to_snapshot(total_macros),
         per_serving_macros=_profile_to_snapshot(per_serving_macros),
     )
+
+
+# ---------------------------------------------------------------------------
+# Auth & User Management
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/auth/login", response_model=LoginResponse)
+def login(payload: LoginRequest):
+    with db_session() as conn:
+        row = conn.execute(
+            "SELECT id, username, password_hash, role FROM users WHERE username = ?;",
+            (payload.username,),
+        ).fetchone()
+        if row is None or not verify_password(payload.password, row["password_hash"]):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Hibás felhasználónév vagy jelszó.",
+            )
+        token = create_session_token(conn, int(row["id"]))
+        return LoginResponse(
+            token=token,
+            user=UserSummary(
+                id=int(row["id"]),
+                username=str(row["username"]),
+                role=str(row["role"]),
+            ),
+        )
+
+
+@app.post("/api/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(current_user: CurrentUser = Depends(get_current_user)):
+    with db_session() as conn:
+        delete_session_token(conn, current_user.token)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@app.get("/api/auth/me", response_model=UserSummary)
+def get_me(current_user: CurrentUser = Depends(get_current_user)):
+    return UserSummary(
+        id=current_user.user_id,
+        username=current_user.username,
+        role=current_user.role,
+    )
+
+
+@app.post("/api/auth/change-password", status_code=status.HTTP_200_OK)
+def change_password(
+    payload: ChangePasswordRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    with db_session() as conn:
+        row = conn.execute(
+            "SELECT password_hash FROM users WHERE id = ?;",
+            (current_user.user_id,),
+        ).fetchone()
+        if row is None or not verify_password(payload.old_password, row["password_hash"]):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="A megadott régi jelszó hibás.",
+            )
+        new_hash = hash_password(payload.new_password)
+        conn.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?;",
+            (new_hash, current_user.user_id),
+        )
+    return {"message": "A jelszó sikeresen megváltoztatva."}
+
+
+@app.get("/api/users", response_model=List[UserSummary])
+def list_users(_admin: CurrentUser = Depends(require_admin)):
+    with db_session() as conn:
+        rows = conn.execute(
+            "SELECT id, username, role FROM users ORDER BY id ASC;"
+        ).fetchall()
+        return [
+            UserSummary(
+                id=int(r["id"]),
+                username=str(r["username"]),
+                role=str(r["role"]),
+            )
+            for r in rows
+        ]
+
+
+@app.post(
+    "/api/users",
+    response_model=UserSummary,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_user(
+    payload: UserCreate,
+    _admin: CurrentUser = Depends(require_admin),
+):
+    with db_session() as conn:
+        try:
+            cursor = conn.execute(
+                """
+                INSERT INTO users
+                    (username, password_hash, role, daily_carb_limit, daily_protein_target, daily_fat_target)
+                VALUES (?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    payload.username,
+                    hash_password("basic"),
+                    "USER",
+                    "50.00",
+                    "120.00",
+                    "70.00",
+                ),
+            )
+        except sqlite3.IntegrityError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Már létezik ilyen felhasználónév: '{payload.username}'.",
+            ) from exc
+
+        return UserSummary(
+            id=int(cursor.lastrowid),
+            username=payload.username,
+            role="USER",
+        )
 
 
 # ---------------------------------------------------------------------------

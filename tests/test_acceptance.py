@@ -1,8 +1,10 @@
 from decimal import Decimal
+from pathlib import Path
 
 from fastapi.testclient import TestClient
+import pytest
 
-from backend.database import db_session, db_to_decimal
+from backend.database import db_session, db_to_decimal, init_db
 from backend.domain.validators import validate_ingredient_macros
 from backend.seed import seed_database
 
@@ -414,17 +416,28 @@ def test_snapshot_immutability_after_ingredient_update(
     assert Decimal(summary["totals"]["sugar"]) == Decimal("2.00")
 
 
-def test_seed_database_populates_100_recipes_and_valid_ingredients(test_db_path: str):
-    """seed.py runs cleanly, creates >=45 ingredients & exactly 100 recipes,
-    and every seeded ingredient passes EU domain validation."""
-    seed_database(test_db_path)
+def test_seed_database_populates_100_recipes_and_valid_ingredients(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """seed.py runs cleanly, creates admin + 3 test users, >=45 ingredients & 100 recipes,
+    every seeded ingredient passes EU validation, and all seeded accounts can log in."""
+    seed_db = str(tmp_path / "seed_verify.db")
+    monkeypatch.setenv("SMARTMACRO_DB_PATH", seed_db)
+    init_db(seed_db)
+    seed_database(seed_db)
 
-    with db_session(test_db_path) as conn:
+    with db_session(seed_db) as conn:
         ingredients = conn.execute("SELECT * FROM ingredients;").fetchall()
         recipe_count = conn.execute("SELECT COUNT(*) FROM recipes;").fetchone()[0]
-        user_count = conn.execute("SELECT COUNT(*) FROM users;").fetchone()[0]
+        users = conn.execute("SELECT username, role FROM users ORDER BY id ASC;").fetchall()
 
-    assert user_count == 2
+    usernames = {u["username"]: u["role"] for u in users}
+    assert usernames == {
+        "admin": "ADMIN",
+        "MakkMarci": "USER",
+        "RegősBendegúz": "USER",
+        "ToldiMiklós": "USER",
+    }
     assert len(ingredients) >= 45
     assert recipe_count == 100
 
@@ -440,6 +453,130 @@ def test_seed_database_populates_100_recipes_and_valid_ingredients(test_db_path:
             fiber=db_to_decimal(row["fiber"]),
             salt=db_to_decimal(row["salt"]),
         )
+
+    # Verify login for admin and all 3 seeded test users
+    from backend.main import app
+
+    seed_client = TestClient(app)
+    for uname, pw in [
+        ("admin", "admin"),
+        ("MakkMarci", "basic"),
+        ("RegősBendegúz", "basic"),
+        ("ToldiMiklós", "basic"),
+    ]:
+        r = seed_client.post("/api/auth/login", json={"username": uname, "password": pw})
+        assert r.status_code == 200, f"Login failed for {uname}: {r.text}"
+
+
+def test_auth_login_logout_and_invalid_credentials(client: TestClient):
+    """Valid login returns token; invalid credentials return 401; logout invalidates token."""
+    bad = client.post("/api/auth/login", json={"username": "admin", "password": "wrong"})
+    assert bad.status_code == 401
+
+    ok = client.post("/api/auth/login", json={"username": "admin", "password": "admin"})
+    assert ok.status_code == 200
+    token = ok.json()["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    me = client.get("/api/auth/me", headers=headers)
+    assert me.status_code == 200
+    assert me.json()["username"] == "admin"
+
+    out = client.post("/api/auth/logout", headers=headers)
+    assert out.status_code == 204
+
+    after_out = client.get("/api/auth/me", headers=headers)
+    assert after_out.status_code == 401
+
+
+def test_admin_creates_user_and_new_user_logs_in_with_basic(
+    client: TestClient, admin_headers: dict, user_headers: dict
+):
+    """Only ADMIN can create/list users (USER gets 403); created user logs in with 'basic'."""
+    forbidden_post = client.post(
+        "/api/users", headers=user_headers, json={"username": "UjFelhasznalo"}
+    )
+    assert forbidden_post.status_code == 403
+
+    forbidden_get = client.get("/api/users", headers=user_headers)
+    assert forbidden_get.status_code == 403
+
+    created = client.post(
+        "/api/users", headers=admin_headers, json={"username": "KukoricaJancsi"}
+    )
+    assert created.status_code == 201
+    assert created.json()["username"] == "KukoricaJancsi"
+    assert created.json()["role"] == "USER"
+
+    # Duplicate username -> 409 Conflict
+    dup = client.post(
+        "/api/users", headers=admin_headers, json={"username": "KukoricaJancsi"}
+    )
+    assert dup.status_code == 409
+
+    # New user can log in with default password 'basic'
+    login_resp = client.post(
+        "/api/auth/login", json={"username": "KukoricaJancsi", "password": "basic"}
+    )
+    assert login_resp.status_code == 200
+
+    # Admin can list users without password_hash exposed
+    users_resp = client.get("/api/users", headers=admin_headers)
+    assert users_resp.status_code == 200
+    assert all("password_hash" not in u for u in users_resp.json())
+
+
+def test_change_password_success_and_validation_errors(
+    client: TestClient, user_headers: dict
+):
+    """Password change rejects wrong old password (401) and mismatched new passwords (422),
+    and updates password hash on success."""
+    # Mismatched new passwords -> 422
+    mismatch = client.post(
+        "/api/auth/change-password",
+        headers=user_headers,
+        json={
+            "old_password": "basic",
+            "new_password": "newpass123",
+            "confirm_password": "different",
+        },
+    )
+    assert mismatch.status_code == 422
+
+    # Wrong old password -> 401
+    wrong_old = client.post(
+        "/api/auth/change-password",
+        headers=user_headers,
+        json={
+            "old_password": "wrong_old",
+            "new_password": "newpass123",
+            "confirm_password": "newpass123",
+        },
+    )
+    assert wrong_old.status_code == 401
+
+    # Valid password change -> 200
+    ok = client.post(
+        "/api/auth/change-password",
+        headers=user_headers,
+        json={
+            "old_password": "basic",
+            "new_password": "uj_jelszo_2026",
+            "confirm_password": "uj_jelszo_2026",
+        },
+    )
+    assert ok.status_code == 200
+
+    # Old password no longer works, new password works
+    old_login = client.post(
+        "/api/auth/login", json={"username": "MakkMarci", "password": "basic"}
+    )
+    assert old_login.status_code == 401
+
+    new_login = client.post(
+        "/api/auth/login", json={"username": "MakkMarci", "password": "uj_jelszo_2026"}
+    )
+    assert new_login.status_code == 200
 
 
 def test_frontend_static_root_served(client: TestClient):

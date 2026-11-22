@@ -1,25 +1,34 @@
 (() => {
+  const TOKEN_KEY = "smartmacro_token";
   const state = {
-    role: "USER",
+    token: localStorage.getItem(TOKEN_KEY) || null,
+    user: null,
     ingredients: [],
     recipes: [],
   };
 
-  const roleSelect = document.getElementById("roleSelect");
+  const loginScreen = document.getElementById("loginScreen");
+  const appShell = document.getElementById("appShell");
+  const loginError = document.getElementById("loginError");
+  const loginForm = document.getElementById("loginForm");
+  const currentUsername = document.getElementById("currentUsername");
+  const currentRoleBadge = document.getElementById("currentRoleBadge");
+  const logoutBtn = document.getElementById("logoutBtn");
+  const adminUsersSection = document.getElementById("adminUsersSection");
+
   const alertBox = document.getElementById("alertBox");
   const alertMessage = document.getElementById("alertMessage");
   const alertClose = document.getElementById("alertClose");
   const logDateInput = document.getElementById("logDateInput");
 
-  // Default date to today
   logDateInput.value = new Date().toISOString().slice(0, 10);
 
   function getHeaders() {
-    return {
-      "Content-Type": "application/json",
-      "X-User-Role": state.role,
-      "X-User-Id": state.role === "ADMIN" ? "2" : "1",
-    };
+    const headers = { "Content-Type": "application/json" };
+    if (state.token) {
+      headers["Authorization"] = `Bearer ${state.token}`;
+    }
+    return headers;
   }
 
   function showAlert(message, type = "error") {
@@ -43,7 +52,7 @@
     return `HTTP ${statusCode}: ${JSON.stringify(data)}`;
   }
 
-  async function apiFetch(url, options = {}) {
+  async function apiFetch(url, options = {}, { silentAuth = false } = {}) {
     const resp = await fetch(url, {
       ...options,
       headers: {
@@ -55,11 +64,79 @@
     const data = await resp.json().catch(() => null);
     if (!resp.ok) {
       const msg = extractErrorMessage(data, resp.status);
-      showAlert(msg, "error");
+      if (resp.status === 401 && !silentAuth) {
+        clearSessionAndShowLogin();
+      } else if (!silentAuth) {
+        showAlert(msg, "error");
+      }
       throw new Error(msg);
     }
     return data;
   }
+
+  function showLoginScreen() {
+    appShell.classList.add("hidden");
+    loginScreen.classList.remove("hidden");
+    loginError.classList.add("hidden");
+    loginForm.reset();
+    document.getElementById("loginUsername").focus();
+  }
+
+  function clearSessionAndShowLogin() {
+    state.token = null;
+    state.user = null;
+    localStorage.removeItem(TOKEN_KEY);
+    showLoginScreen();
+  }
+
+  function enterApp(user) {
+    state.user = user;
+    currentUsername.textContent = user.username;
+    currentRoleBadge.textContent = user.role;
+    if (user.role === "ADMIN") {
+      adminUsersSection.classList.remove("hidden");
+    } else {
+      adminUsersSection.classList.add("hidden");
+    }
+    loginScreen.classList.add("hidden");
+    appShell.classList.remove("hidden");
+    hideAlert();
+  }
+
+  // Login form
+  loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    loginError.classList.add("hidden");
+    const username = document.getElementById("loginUsername").value.trim();
+    const password = document.getElementById("loginPassword").value;
+    try {
+      const data = await apiFetch(
+        "/api/auth/login",
+        {
+          method: "POST",
+          body: JSON.stringify({ username, password }),
+        },
+        { silentAuth: true }
+      );
+      state.token = data.token;
+      localStorage.setItem(TOKEN_KEY, data.token);
+      enterApp(data.user);
+      await loadAllAppData();
+    } catch (err) {
+      loginError.textContent = err.message;
+      loginError.classList.remove("hidden");
+    }
+  });
+
+  // Logout / Switch user
+  logoutBtn.addEventListener("click", async () => {
+    try {
+      await apiFetch("/api/auth/logout", { method: "POST" }, { silentAuth: true });
+    } catch (_) {
+      // ignore if already expired
+    }
+    clearSessionAndShowLogin();
+  });
 
   // Tabs
   document.querySelectorAll(".tab-btn").forEach((btn) => {
@@ -72,17 +149,8 @@
     });
   });
 
-  // Role switcher
-  roleSelect.addEventListener("change", () => {
-    state.role = roleSelect.value;
-    hideAlert();
-    loadProfile();
-    loadBanned();
-    loadDailySummary();
-  });
-
   // -------------------------------------------------------------------------
-  // Tab 1: Ingredients
+  // Tab 1: Ingredients & Admin User Management
   // -------------------------------------------------------------------------
   function renderIngredientsTable(list) {
     const tbody = document.getElementById("ingredientsTableBody");
@@ -145,13 +213,42 @@
       e.target.reset();
       showAlert("Alapanyag sikeresen mentve!", "success");
       await loadIngredients();
-    } catch (_) {
-      // Error already shown in alertBox
-    }
+    } catch (_) {}
+  });
+
+  async function loadUsers() {
+    if (!state.user || state.user.role !== "ADMIN") return;
+    const users = await apiFetch("/api/users");
+    const tbody = document.getElementById("usersTableBody");
+    tbody.innerHTML = "";
+    users.forEach((u) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${u.id}</td>
+        <td><strong>${escapeHtml(u.username)}</strong></td>
+        <td>${escapeHtml(u.role)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  document.getElementById("createUserForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    hideAlert();
+    const username = document.getElementById("newUsernameInput").value.trim();
+    try {
+      await apiFetch("/api/users", {
+        method: "POST",
+        body: JSON.stringify({ username }),
+      });
+      document.getElementById("newUsernameInput").value = "";
+      showAlert(`Felhasználó ('${username}') létrehozva! Alapértelmezett jelszó: basic`, "success");
+      await loadUsers();
+    } catch (_) {}
   });
 
   // -------------------------------------------------------------------------
-  // Tab 2: Profile & Banned Ingredients
+  // Tab 2: Profile, Password Change & Banned Ingredients
   // -------------------------------------------------------------------------
   async function loadProfile() {
     const data = await apiFetch("/api/profile");
@@ -173,6 +270,30 @@
       showAlert("Profil sikeresen frissítve!", "success");
       await loadDailySummary();
     } catch (_) {}
+  });
+
+  document.getElementById("changePasswordForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    hideAlert();
+    const payload = {
+      old_password: document.getElementById("oldPassword").value,
+      new_password: document.getElementById("newPassword").value,
+      confirm_password: document.getElementById("confirmPassword").value,
+    };
+    try {
+      const res = await apiFetch(
+        "/api/auth/change-password",
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+        { silentAuth: true }
+      );
+      e.target.reset();
+      showAlert(res.message || "A jelszó sikeresen megváltoztatva!", "success");
+    } catch (err) {
+      showAlert(err.message, "error");
+    }
   });
 
   async function loadBanned() {
@@ -376,10 +497,27 @@
       .replaceAll('"', "&quot;");
   }
 
-  // Initial load
-  (async function init() {
+  async function loadAllAppData() {
     await loadIngredients();
-    addRecipeItemRow();
-    await Promise.all([loadProfile(), loadBanned(), loadRecipes(), loadDailySummary()]);
+    const itemsContainer = document.getElementById("recipeItemsContainer");
+    if (!itemsContainer.children.length) {
+      addRecipeItemRow();
+    }
+    await Promise.all([loadProfile(), loadBanned(), loadRecipes(), loadDailySummary(), loadUsers()]);
+  }
+
+  // Startup: check existing token via /api/auth/me
+  (async function init() {
+    if (!state.token) {
+      showLoginScreen();
+      return;
+    }
+    try {
+      const user = await apiFetch("/api/auth/me", {}, { silentAuth: true });
+      enterApp(user);
+      await loadAllAppData();
+    } catch (_) {
+      clearSessionAndShowLogin();
+    }
   })();
 })();

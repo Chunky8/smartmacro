@@ -7,274 +7,352 @@
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="topbar-inner">
-      <div class="brand">
+  <!-- BEJELENTKEZŐ KÉPERNYŐ -->
+  <div id="loginScreen" class="login-screen">
+    <div class="login-card">
+      <div class="brand" style="margin-bottom: 16px;">
         <span class="brand-logo">SM</span>
         <div>
           <h1>SmartMacro</h1>
-          <p class="subtitle">EU-szabványú makrotápanyag- és napi étrend-optimalizáló</p>
+          <p class="subtitle" style="color: var(--muted);">Bejelentkezés a fiókodba</p>
         </div>
       </div>
-      <div class="role-switcher">
-        <label for="roleSelect">Aktív szerepkör:</label>
-        <select id="roleSelect" aria-label="Szerepkör választó">
-          <option value="USER">Felhasználó (USER)</option>
-          <option value="ADMIN">Adminisztrátor (ADMIN)</option>
-        </select>
-      </div>
+
+      <div id="loginError" class="alert alert-error hidden" role="alert"></div>
+
+      <form id="loginForm" class="stack-sm">
+        <label class="field-label">
+          Felhasználónév
+          <input type="text" id="loginUsername" required autocomplete="username" placeholder="pl. MakkMarci vagy admin" />
+        </label>
+        <label class="field-label">
+          Jelszó
+          <input type="password" id="loginPassword" required autocomplete="current-password" placeholder="Jelszó" />
+        </label>
+        <button type="submit" class="btn btn-primary" style="margin-top: 8px;">Bejelentkezés</button>
+      </form>
     </div>
-  </header>
+  </div>
 
-  <main class="container">
-    <div id="alertBox" class="alert hidden" role="alert">
-      <span id="alertMessage"></span>
-      <button id="alertClose" class="alert-close" type="button" aria-label="Bezárás">&times;</button>
-    </div>
-
-    <nav class="tabs" role="tablist">
-      <button class="tab-btn active" data-tab="tab-ingredients" role="tab">1. Törzsadatok</button>
-      <button class="tab-btn" data-tab="tab-profile" role="tab">2. Profil &amp; Tiltólista</button>
-      <button class="tab-btn" data-tab="tab-recipes-logs" role="tab">3. Receptek &amp; Napi Napló</button>
-    </nav>
-
-    <!-- TAB 1: TÖRZSAATOK -->
-    <section id="tab-ingredients" class="tab-panel active">
-      <div class="grid-2">
-        <div class="card">
-          <div class="card-header">
-            <h2>Alapanyag-törzsadatbázis (100 g-ra)</h2>
-            <input id="ingredientSearch" type="search" placeholder="Keresés név alapján..." class="search-input" />
-          </div>
-          <div class="table-wrap scroll-tall">
-            <table>
-              <thead>
-                <tr>
-                  <th>Név</th>
-                  <th>Kcal</th>
-                  <th>Fehérje (g)</th>
-                  <th>CH / Cukor (g)</th>
-                  <th>Zsír (Tel. / Telítetlen)</th>
-                  <th>Rost (g)</th>
-                  <th>Só (g)</th>
-                </tr>
-              </thead>
-              <tbody id="ingredientsTableBody"></tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="card">
-          <h2>Új alapanyag felvitele (100 g)</h2>
-          <p class="hint">EU szabályok: Cukor &le; CH, Telített + Telítetlen &le; Zsír, Fehérje + CH + Zsír + Rost + Só &le; 100.00 g. Csak ADMIN jogosultsággal!</p>
-          <form id="ingredientForm" class="form-grid">
-            <label class="full-width">
-              Megnevezés
-              <input type="text" name="name" required placeholder="pl. Zabpehely" />
-            </label>
-            <label>
-              Energia (kcal)
-              <input type="number" step="0.01" name="energy_kcal" value="0.00" required />
-            </label>
-            <label>
-              Fehérje (g)
-              <input type="number" step="0.01" name="protein" value="0.00" required />
-            </label>
-            <label>
-              Szénhidrát (g)
-              <input type="number" step="0.01" name="carbs" value="0.00" required />
-            </label>
-            <label>
-              ebből Cukor (g)
-              <input type="number" step="0.01" name="sugar" value="0.00" required />
-            </label>
-            <label>
-              Zsír (g)
-              <input type="number" step="0.01" name="fat" value="0.00" required />
-            </label>
-            <label>
-              ebből Telített (g)
-              <input type="number" step="0.01" name="saturated_fat" value="0.00" required />
-            </label>
-            <label>
-              ebből Telítetlen (g)
-              <input type="number" step="0.01" name="unsaturated_fat" value="0.00" required />
-            </label>
-            <label>
-              Rost (g)
-              <input type="number" step="0.01" name="fiber" value="0.00" required />
-            </label>
-            <label>
-              Só (g)
-              <input type="number" step="0.01" name="salt" value="0.00" required />
-            </label>
-            <div class="full-width">
-              <button type="submit" class="btn btn-primary">Alapanyag mentése</button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </section>
-
-    <!-- TAB 2: PROFIL & TILTÓLISTA -->
-    <section id="tab-profile" class="tab-panel">
-      <div class="grid-2">
-        <div class="card">
-          <h2>Napi makrókeretek beállítása</h2>
-          <form id="profileForm" class="form-grid">
-            <label class="full-width">
-              Maximális napi szénhidrátlimit (g)
-              <input type="number" step="0.01" id="dailyCarbLimit" name="daily_carb_limit" required />
-            </label>
-            <label>
-              Napi fehérjecél (g)
-              <input type="number" step="0.01" id="dailyProteinTarget" name="daily_protein_target" required />
-            </label>
-            <label>
-              Napi zsírcél (g)
-              <input type="number" step="0.01" id="dailyFatTarget" name="daily_fat_target" required />
-            </label>
-            <div class="full-width">
-              <button type="submit" class="btn btn-primary">Profil mentése</button>
-            </div>
-          </form>
-        </div>
-
-        <div class="card">
-          <h2>Tiltólistás alapanyagok</h2>
-          <p class="hint">Tiltólistás alapanyagot tartalmazó étkezés vagy recept naplózását a rendszer 422 hibával megtagadja.</p>
-          <form id="bannedForm" class="inline-form">
-            <select id="bannedIngredientSelect" required></select>
-            <button type="submit" class="btn btn-danger">Tiltólistához adás</button>
-          </form>
-          <ul id="bannedList" class="banned-list"></ul>
-        </div>
-      </div>
-    </section>
-
-    <!-- TAB 3: RECEPTEK & NAPI NAPLÓ -->
-    <section id="tab-recipes-logs" class="tab-panel">
-      <!-- Napi egyenleg kártya -->
-      <div class="card summary-card">
-        <div class="summary-top">
+  <!-- FŐ ALKALMAZÁS -->
+  <div id="appShell" class="hidden">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand">
+          <span class="brand-logo">SM</span>
           <div>
-            <h2>Napi egyenleg</h2>
-            <div class="date-row">
-              <label for="logDateInput">Dátum:</label>
-              <input type="date" id="logDateInput" />
-            </div>
+            <h1>SmartMacro</h1>
+            <p class="subtitle">EU-szabványú makrotápanyag- és napi étrend-optimalizáló</p>
           </div>
-          <div id="dailyStatusBadge" class="status-badge status-ok">MEGFELELŐ</div>
         </div>
-        <div class="kpi-grid">
-          <div class="kpi">
-            <span class="kpi-label">Szénhidrát / Limit</span>
-            <strong id="kpiCarbs">0.00 / 50.00 g</strong>
-          </div>
-          <div class="kpi">
-            <span class="kpi-label">Maradék CH keret</span>
-            <strong id="kpiRemaining">50.00 g</strong>
-          </div>
-          <div class="kpi">
-            <span class="kpi-label">Cukor</span>
-            <strong id="kpiSugar">0.00 g</strong>
-          </div>
-          <div class="kpi">
-            <span class="kpi-label">Fehérje</span>
-            <strong id="kpiProtein">0.00 g</strong>
-          </div>
-          <div class="kpi">
-            <span class="kpi-label">Zsír</span>
-            <strong id="kpiFat">0.00 g</strong>
-          </div>
-          <div class="kpi">
-            <span class="kpi-label">Só</span>
-            <strong id="kpiSalt">0.00 g</strong>
-          </div>
+        <div class="user-bar">
+          <span class="user-pill">
+            <strong id="currentUsername">-</strong>
+            <span id="currentRoleBadge" class="role-badge">USER</span>
+          </span>
+          <button id="logoutBtn" type="button" class="btn btn-secondary btn-sm">
+            Felhasználó váltása / Kijelentkezés
+          </button>
         </div>
       </div>
+    </header>
 
-      <div class="grid-2">
-        <!-- Bal oldal: Receptek böngészése + Új recept -->
-        <div class="stack">
+    <main class="container">
+      <div id="alertBox" class="alert hidden" role="alert">
+        <span id="alertMessage"></span>
+        <button id="alertClose" class="alert-close" type="button" aria-label="Bezárás">&times;</button>
+      </div>
+
+      <nav class="tabs" role="tablist">
+        <button class="tab-btn active" data-tab="tab-ingredients" role="tab">1. Törzsadatok</button>
+        <button class="tab-btn" data-tab="tab-profile" role="tab">2. Profil &amp; Tiltólista</button>
+        <button class="tab-btn" data-tab="tab-recipes-logs" role="tab">3. Receptek &amp; Napi Napló</button>
+      </nav>
+
+      <!-- TAB 1: TÖRZSADATOK (+ ADMIN FELHASZNÁLÓKEZELÉS) -->
+      <section id="tab-ingredients" class="tab-panel active">
+        <div class="grid-2">
           <div class="card">
             <div class="card-header">
-              <h2>Receptek (<span id="recipeCount">0</span> db)</h2>
-              <input id="recipeSearch" type="search" placeholder="Recept keresése név alapján..." class="search-input" />
+              <h2>Alapanyag-törzsadatbázis (100 g-ra)</h2>
+              <input id="ingredientSearch" type="search" placeholder="Keresés név alapján..." class="search-input" />
             </div>
-            <div id="recipesList" class="recipes-scroll"></div>
+            <div class="table-wrap scroll-tall">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Név</th>
+                    <th>Kcal</th>
+                    <th>Fehérje (g)</th>
+                    <th>CH / Cukor (g)</th>
+                    <th>Zsír (Tel. / Telítetlen)</th>
+                    <th>Rost (g)</th>
+                    <th>Só (g)</th>
+                  </tr>
+                </thead>
+                <tbody id="ingredientsTableBody"></tbody>
+              </table>
+            </div>
           </div>
 
           <div class="card">
-            <h2>Új recept összeállítása</h2>
-            <form id="recipeForm" class="form-grid">
-              <label>
-                Recept neve
-                <input type="text" id="recipeName" required placeholder="pl. Csirkés brokkolis tál" />
+            <h2>Új alapanyag felvitele (100 g)</h2>
+            <p class="hint">EU szabályok: Cukor &le; CH, Telített + Telítetlen &le; Zsír, Fehérje + CH + Zsír + Rost + Só &le; 100.00 g. Csak ADMIN jogosultsággal!</p>
+            <form id="ingredientForm" class="form-grid">
+              <label class="full-width">
+                Megnevezés
+                <input type="text" name="name" required placeholder="pl. Zabpehely" />
               </label>
               <label>
-                Adagszám
-                <input type="number" step="0.01" id="recipeServings" value="2.00" required />
+                Energia (kcal)
+                <input type="number" step="0.01" name="energy_kcal" value="0.00" required />
+              </label>
+              <label>
+                Fehérje (g)
+                <input type="number" step="0.01" name="protein" value="0.00" required />
+              </label>
+              <label>
+                Szénhidrát (g)
+                <input type="number" step="0.01" name="carbs" value="0.00" required />
+              </label>
+              <label>
+                ebből Cukor (g)
+                <input type="number" step="0.01" name="sugar" value="0.00" required />
+              </label>
+              <label>
+                Zsír (g)
+                <input type="number" step="0.01" name="fat" value="0.00" required />
+              </label>
+              <label>
+                ebből Telített (g)
+                <input type="number" step="0.01" name="saturated_fat" value="0.00" required />
+              </label>
+              <label>
+                ebből Telítetlen (g)
+                <input type="number" step="0.01" name="unsaturated_fat" value="0.00" required />
+              </label>
+              <label>
+                Rost (g)
+                <input type="number" step="0.01" name="fiber" value="0.00" required />
+              </label>
+              <label>
+                Só (g)
+                <input type="number" step="0.01" name="salt" value="0.00" required />
               </label>
               <div class="full-width">
-                <div class="recipe-items-header">
-                  <span>Összetevők</span>
-                  <button type="button" id="addRecipeItemBtn" class="btn btn-secondary btn-sm">+ Összetevő</button>
-                </div>
-                <div id="recipeItemsContainer" class="stack-sm"></div>
-              </div>
-              <div class="full-width">
-                <button type="submit" class="btn btn-primary">Recept mentése</button>
+                <button type="submit" class="btn btn-primary">Alapanyag mentése</button>
               </div>
             </form>
           </div>
         </div>
 
-        <!-- Jobb oldal: Étkezés naplózása + Napi tételek -->
-        <div class="stack">
-          <div class="card">
-            <h2>Alapanyag naplózása</h2>
-            <form id="logIngredientForm" class="form-grid">
-              <label class="full-width">
-                Alapanyag
-                <select id="logIngredientSelect" required></select>
-              </label>
-              <label>
-                Mennyiség (g)
-                <input type="number" step="0.01" id="logIngredientWeight" value="100.00" required />
-              </label>
-              <label>
-                Megnevezés (opcionális)
-                <input type="text" id="logMealName" placeholder="pl. Reggeli" />
-              </label>
-              <div class="full-width">
-                <button type="submit" class="btn btn-primary">Naplózás</button>
-              </div>
-            </form>
-          </div>
-
-          <div class="card">
-            <h2>Naplózott étkezések</h2>
+        <!-- ADMIN FELHASZNÁLÓKEZELÉS -->
+        <div id="adminUsersSection" class="card hidden" style="margin-top: 18px;">
+          <h2>Admin – Felhasználók kezelése</h2>
+          <div class="grid-2">
+            <div>
+              <p class="hint">Új felhasználó létrehozása (szerepkör: <strong>USER</strong>, alapértelmezett jelszó: <code>basic</code>).</p>
+              <form id="createUserForm" class="inline-form">
+                <input type="text" id="newUsernameInput" required placeholder="Új felhasználónév..." />
+                <button type="submit" class="btn btn-primary">Felhasználó létrehozása</button>
+              </form>
+            </div>
             <div class="table-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th>Tétel</th>
-                    <th>CH (g)</th>
-                    <th>Cukor (g)</th>
-                    <th>Fehérje (g)</th>
-                    <th>Zsír (g)</th>
-                    <th>Só (g)</th>
+                    <th>ID</th>
+                    <th>Felhasználónév</th>
+                    <th>Szerepkör</th>
                   </tr>
                 </thead>
-                <tbody id="dailyLogsBody"></tbody>
+                <tbody id="usersTableBody"></tbody>
               </table>
             </div>
           </div>
         </div>
-      </div>
-    </section>
-  </main>
+      </section>
+
+      <!-- TAB 2: PROFIL & TILTÓLISTA & JELSZÓMÓDOSÍTÁS -->
+      <section id="tab-profile" class="tab-panel">
+        <div class="grid-2">
+          <div class="stack">
+            <div class="card">
+              <h2>Napi makrókeretek beállítása</h2>
+              <form id="profileForm" class="form-grid">
+                <label class="full-width">
+                  Maximális napi szénhidrátlimit (g)
+                  <input type="number" step="0.01" id="dailyCarbLimit" name="daily_carb_limit" required />
+                </label>
+                <label>
+                  Napi fehérjecél (g)
+                  <input type="number" step="0.01" id="dailyProteinTarget" name="daily_protein_target" required />
+                </label>
+                <label>
+                  Napi zsírcél (g)
+                  <input type="number" step="0.01" id="dailyFatTarget" name="daily_fat_target" required />
+                </label>
+                <div class="full-width">
+                  <button type="submit" class="btn btn-primary">Profil mentése</button>
+                </div>
+              </form>
+            </div>
+
+            <div class="card">
+              <h2>Jelszó módosítása</h2>
+              <form id="changePasswordForm" class="stack-sm">
+                <label class="field-label">
+                  Régi jelszó
+                  <input type="password" id="oldPassword" required autocomplete="current-password" />
+                </label>
+                <label class="field-label">
+                  Új jelszó
+                  <input type="password" id="newPassword" required autocomplete="new-password" />
+                </label>
+                <label class="field-label">
+                  Új jelszó mégegyszer
+                  <input type="password" id="confirmPassword" required autocomplete="new-password" />
+                </label>
+                <div style="margin-top: 4px;">
+                  <button type="submit" class="btn btn-primary">Jelszó mentése</button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Tiltólistás alapanyagok</h2>
+            <p class="hint">Tiltólistás alapanyagot tartalmazó étkezés vagy recept naplózását a rendszer 422 hibával megtagadja.</p>
+            <form id="bannedForm" class="inline-form">
+              <select id="bannedIngredientSelect" required></select>
+              <button type="submit" class="btn btn-danger">Tiltólistához adás</button>
+            </form>
+            <ul id="bannedList" class="banned-list"></ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: RECEPTEK & NAPI NAPLÓ -->
+      <section id="tab-recipes-logs" class="tab-panel">
+        <div class="card summary-card">
+          <div class="summary-top">
+            <div>
+              <h2>Napi egyenleg</h2>
+              <div class="date-row">
+                <label for="logDateInput">Dátum:</label>
+                <input type="date" id="logDateInput" />
+              </div>
+            </div>
+            <div id="dailyStatusBadge" class="status-badge status-ok">MEGFELELŐ</div>
+          </div>
+          <div class="kpi-grid">
+            <div class="kpi">
+              <span class="kpi-label">Szénhidrát / Limit</span>
+              <strong id="kpiCarbs">0.00 / 50.00 g</strong>
+            </div>
+            <div class="kpi">
+              <span class="kpi-label">Maradék CH keret</span>
+              <strong id="kpiRemaining">50.00 g</strong>
+            </div>
+            <div class="kpi">
+              <span class="kpi-label">Cukor</span>
+              <strong id="kpiSugar">0.00 g</strong>
+            </div>
+            <div class="kpi">
+              <span class="kpi-label">Fehérje</span>
+              <strong id="kpiProtein">0.00 g</strong>
+            </div>
+            <div class="kpi">
+              <span class="kpi-label">Zsír</span>
+              <strong id="kpiFat">0.00 g</strong>
+            </div>
+            <div class="kpi">
+              <span class="kpi-label">Só</span>
+              <strong id="kpiSalt">0.00 g</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="stack">
+            <div class="card">
+              <div class="card-header">
+                <h2>Receptek (<span id="recipeCount">0</span> db)</h2>
+                <input id="recipeSearch" type="search" placeholder="Recept keresése név alapján..." class="search-input" />
+              </div>
+              <div id="recipesList" class="recipes-scroll"></div>
+            </div>
+
+            <div class="card">
+              <h2>Új recept összeállítása</h2>
+              <form id="recipeForm" class="form-grid">
+                <label>
+                  Recept neve
+                  <input type="text" id="recipeName" required placeholder="pl. Csirkés brokkolis tál" />
+                </label>
+                <label>
+                  Adagszám
+                  <input type="number" step="0.01" id="recipeServings" value="2.00" required />
+                </label>
+                <div class="full-width">
+                  <div class="recipe-items-header">
+                    <span>Összetevők</span>
+                    <button type="button" id="addRecipeItemBtn" class="btn btn-secondary btn-sm">+ Összetevő</button>
+                  </div>
+                  <div id="recipeItemsContainer" class="stack-sm"></div>
+                </div>
+                <div class="full-width">
+                  <button type="submit" class="btn btn-primary">Recept mentése</button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <div class="stack">
+            <div class="card">
+              <h2>Alapanyag naplózása</h2>
+              <form id="logIngredientForm" class="form-grid">
+                <label class="full-width">
+                  Alapanyag
+                  <select id="logIngredientSelect" required></select>
+                </label>
+                <label>
+                  Mennyiség (g)
+                  <input type="number" step="0.01" id="logIngredientWeight" value="100.00" required />
+                </label>
+                <label>
+                  Megnevezés (opcionális)
+                  <input type="text" id="logMealName" placeholder="pl. Reggeli" />
+                </label>
+                <div class="full-width">
+                  <button type="submit" class="btn btn-primary">Naplózás</button>
+                </div>
+              </form>
+            </div>
+
+            <div class="card">
+              <h2>Naplózott étkezések</h2>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Tétel</th>
+                      <th>CH (g)</th>
+                      <th>Cukor (g)</th>
+                      <th>Fehérje (g)</th>
+                      <th>Zsír (g)</th>
+                      <th>Só (g)</th>
+                    </tr>
+                  </thead>
+                  <tbody id="dailyLogsBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
 
   <script src="/app.js"></script>
 </body>

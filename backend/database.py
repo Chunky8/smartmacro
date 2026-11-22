@@ -54,10 +54,22 @@ def init_db(db_path: Optional[str] = None) -> None:
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
                 role TEXT NOT NULL DEFAULT 'USER',
                 daily_carb_limit TEXT NOT NULL DEFAULT '50.00',
                 daily_protein_target TEXT NOT NULL DEFAULT '100.00',
                 daily_fat_target TEXT NOT NULL DEFAULT '70.00'
+            );
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sessions (
+                token TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
             """
         )
@@ -145,13 +157,4 @@ def init_db(db_path: Optional[str] = None) -> None:
                 FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE SET NULL
             );
             """
-        )
-
-        # Ensure default user (id=1) exists for convenience
-        conn.execute(
-            """
-            INSERT OR IGNORE INTO users (id, username, role, daily_carb_limit, daily_protein_target, daily_fat_target)
-            VALUES (?, ?, ?, ?, ?, ?);
-            """,
-            (1, "default_user", "USER", "50.00", "100.00", "70.00"),
         )

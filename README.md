@@ -7,7 +7,8 @@ A **SmartMacro** egy Python (**FastAPI**) + beépített **SQLite** (ORM nélkül
 Főbb jellemzők:
 - **Európai szabvány szerinti tápértékkezelés:** a szénhidrát nettó (felszívódó) érték, a cukor a szénhidrát részhalmaza (`0,00 <= cukor <= szénhidrát`), a telített és telítetlen zsírsavak a zsír részhalmazai (`0,00 <= telített + telítetlen <= zsír`), a fő tápanyagok összege pedig legfeljebb `100,00 g / 100 g`.
 - **Századgramm (`0,01 g`) pontosság `float` nélkül:** minden számítás `decimal.Decimal` típussal történik (`ROUND_HALF_UP` kerekítéssel), az SQLite-ban `TEXT` formátumban tárolva a kerekítési hibák elkerüléséhez.
-- **Előre feltöltött törzsadatbázis és receptgyűjtemény:** első induláskor a rendszer automatikusan feltölt **50 db valós, EU-s tápértékű alapanyagot** és pontosan **100 db változatos, életszerű receptet** (reggelik, ebédek, vacsorák, saláták, köretek).
+- **Előre feltöltött törzsadatbázis, receptgyűjtemény és tesztfiókok:** első induláskor a rendszer automatikusan feltölt **50 db valós, EU-s tápértékű alapanyagot**, pontosan **100 db változatos, életszerű receptet** (reggelik, ebédek, vacsorák, saláták, köretek), valamint 1 adminisztrátori és 3 felhasználói fiókot.
+- **Tokenes, jelszavas hitelesítés és felhasználókezelés:** a jelszavak `PBKDF2-HMAC-SHA256` hash-ként kerülnek tárolásra, a védett végpontok `Authorization: Bearer <token>` fejléccel működnek. A felhasználók a **Profil & Tiltólista** fülön megváltoztathatják a jelszavukat, az `ADMIN` pedig új felhasználókat hozhat létre (alapértelmezett `basic` jelszóval).
 - **Tiltólista és napi keretkövetés:** tiltólistás alapanyag naplózása `422` hibával elutasításra kerül, míg a napi szénhidrátlimit túllépésekor az étkezés elmentődik, a napi státusz pedig `KERET_TÚLLÉPVE` jelzésre vált.
 
 Kapcsolódó dokumentációk:
@@ -40,6 +41,19 @@ Indítás után a webes felület elérhető a böngészőben:
 - **Frontend (SPA):** `http://127.0.0.1:8000/`
 - **Swagger / OpenAPI dokumentáció:** `http://127.0.0.1:8000/docs`
 
+### Alapértelmezett tesztfiókok és bejelentkezés
+Induláskor a felület jelszavas bejelentkezést kér (`POST /api/auth/login`), és a sikeres belépés után minden kérést `Authorization: Bearer <token>` fejléccel küld el. A felső sávban található **„Felhasználó váltása / Kijelentkezés”** gombbal lehet fiókot váltani.
+
+| Szerepkör | Felhasználónév | Alapértelmezett jelszó | Napi CH limit |
+|---|---|---|---|
+| `ADMIN` | `admin` | `admin` | `50,00 g` |
+| `USER` | `MakkMarci` | `basic` | `50,00 g` |
+| `USER` | `RegősBendegúz` | `basic` | `50,00 g` |
+| `USER` | `ToldiMiklós` | `basic` | `50,00 g` |
+
+- **Új felhasználó létrehozása (ADMIN):** az `ADMIN` az 1. fülön (*Törzsadatok*) látható **Admin – Felhasználók kezelése** blokkban (vagy `POST /api/users` végponton) csak a felhasználónév megadásával hozhat létre új `USER` fiókot, amelynek alapértelmezett jelszava `basic`.
+- **Jelszó módosítása:** bármely bejelentkezett felhasználó a 2. fülön (*Profil & Tiltólista*) a **Jelszó módosítása** űrlapon (vagy `POST /api/auth/change-password` végponton) megváltoztathatja a jelszavát.
+
 ### Automatizált tesztek futtatása
 ```powershell
 pytest -v
@@ -60,7 +74,10 @@ pytest -v
 | **7.** | Érvénytelen tömegmennyiség (`<= 0,00 g` vagy `> 5000,00 g` → `422`) | `test_ac7_invalid_weight_rejected` |
 | **8.** | Jogosulatlan művelet törzsadatokon (`USER` szerepkör → `403 Forbidden`) | `test_ac8_non_admin_forbidden_on_master_data` |
 | **+** | Snapshot változatlansága törzsadat-módosítás után | `test_snapshot_immutability_after_ingredient_update` |
-| **+** | Kezdeti adatfeltöltés (`50` validált alapanyag, `100` recept) | `test_seed_database_populates_100_recipes_and_valid_ingredients` |
+| **+** | Kezdeti adatfeltöltés (`admin` + 3 tesztfelhasználó, `50` validált alapanyag, `100` recept) | `test_seed_database_populates_100_recipes_and_valid_ingredients` |
+| **+** | Bejelentkezés, kijelentkezés és hibás jelszó (`401`) | `test_auth_login_logout_and_invalid_credentials` |
+| **+** | Admin felhasználó-létrehozás (`USER` → `403`, duplikált → `409`, belépés `basic` jelszóval) | `test_admin_creates_user_and_new_user_logs_in_with_basic` |
+| **+** | Jelszómódosítás (siker, hibás régi jelszó → `401`, eltérő új jelszavak → `422`) | `test_change_password_success_and_validation_errors` |
 | **+** | Statikus frontend kiszolgálás a `/` útvonalon | `test_frontend_static_root_served` |
 
 További unit tesztek: `tests/test_domain.py` (domain validátorok és kalkulátor), valamint `tests/test_bug_demo.py` (AC3 hibabemutató).
